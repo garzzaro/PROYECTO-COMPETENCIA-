@@ -16,3 +16,24 @@ public class Usuario{
         calificacion = new ArrayList<Calificacion>()
     }
 }
+public String getNombre(){
+    return Nombre;
+     }
+
+public int getCalificacion(){
+    return Calificacion;
+     }
+
+public void sumaCalificacion(int valor)
+{
+    this.calificacion += valor;
+     }
+
+    public void sumaCalificacion () {
+        this.calificacion += 1;
+    }
+    
+public String crearGrupo(){
+    String nombreGrupo= "Grupo_"+this.nombre;
+    return nombreGrupo; 
+ }
