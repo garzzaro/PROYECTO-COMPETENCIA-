@@ -1,0 +1,25 @@
+import java.util.List;
+
+public class Grupo {
+
+    private String grupoNombre;
+    private List<Usuario> participantes;
+    private String reto;
+    private Boolean retoFinalizado;
+
+    public boolean Asignar(Usuario usuario) {
+        return participantes.add(usuario);
+    }
+
+    public boolean Desasignar(Usuario usuario) {
+        return participantes.remove(usuario);
+    }
+
+    public void asignarDesafio(DesafioAcademico desafio) {
+        this.reto = desafio.toString();
+    }
+
+    public void finalizarReto() {
+        this.retoFinalizado = true;
+    }
+}
