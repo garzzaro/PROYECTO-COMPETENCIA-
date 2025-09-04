@@ -1,0 +1,425 @@
+package Vista;
+
+import javax.swing.*;
+import javax.swing.table.DefaultTableModel;
+import javax.swing.border.TitledBorder;
+import java.awt.*;
+import java.awt.event.ActionEvent;
+import java.awt.event.ActionListener;
+import java.util.ArrayList;
+import Modelo.*;
+
+public class SistemaRetosVista extends JFrame {
+    
+    private JTabbedPane tabbedPane;
+    
+    private JTextField txtNombreUsuario, txtCorreo, txtContra, txtCarne;
+    private JButton btnRegistrarUsuario, btnModificarUsuario, btnEliminarUsuario;
+    private JTable tablaUsuarios;
+    private DefaultTableModel modeloTablaUsuarios;
+    
+    private JTextField txtNombreReto, txtDescripcionReto, txtPuntosReto;
+    private JCheckBox checkEstadoReto;
+    private JButton btnCrearReto, btnModificarReto, btnEliminarReto;
+    private JTable tablaRetos;
+    private DefaultTableModel modeloTablaRetos;
+    
+    private JComboBox<String> comboUsuarios, comboRetos;
+    private JTextField txtPuntuacion;
+    private JButton btnAsignarCalificacion;
+    private JTable tablaCalificaciones;
+    private DefaultTableModel modeloTablaCalificaciones;
+    
+    private JButton btnAsignarUsuario, btnDesasignarUsuario, btnPunteoRetos;
+    private JTextArea areaResultados;
+    
+    private ArrayList<Usuario> usuarios;
+    private ArrayList<Retos> retos;
+    private ArrayList<Calificacion> calificaciones;
+    private Administrador admin;
+    
+    public SistemaRetosVista() {
+        usuarios = new ArrayList<>();
+        retos = new ArrayList<>();
+        calificaciones = new ArrayList<>();
+        admin = new Administrador();
+        
+        configurarVentana();
+        crearComponentes();
+        configurarEventos();
+        setVisible(true);
+    }
+    
+    private void configurarVentana() {
+        setTitle("Sistema de Gestión de Retos");
+        setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+        setSize(900, 600);
+        setLocationRelativeTo(null);
+        setLayout(new BorderLayout());
+    }
+    
+    private void crearComponentes() {
+        tabbedPane = new JTabbedPane();
+        
+        tabbedPane.addTab("Usuarios", crearPanelUsuarios());
+        tabbedPane.addTab("Retos", crearPanelRetos());
+        tabbedPane.addTab("Calificaciones", crearPanelCalificaciones());
+        tabbedPane.addTab("Administrador", crearPanelAdmin());
+        
+        add(tabbedPane, BorderLayout.CENTER);
+    }
+    
+    private JPanel crearPanelUsuarios() {
+        JPanel panel = new JPanel(new BorderLayout());
+        
+        JPanel form = new JPanel(new GridLayout(5, 2, 5, 5));
+        form.setBorder(new TitledBorder("Datos del Usuario"));
+        
+        form.add(new JLabel("Nombre:"));
+        txtNombreUsuario = new JTextField();
+        form.add(txtNombreUsuario);
+        
+        form.add(new JLabel("Correo:"));
+        txtCorreo = new JTextField();
+        form.add(txtCorreo);
+        
+        form.add(new JLabel("Contraseña:"));
+        txtContra = new JPasswordField();
+        form.add(txtContra);
+        
+        form.add(new JLabel("Carné:"));
+        txtCarne = new JTextField();
+        form.add(txtCarne);
+        
+        JPanel botones = new JPanel();
+        btnRegistrarUsuario = new JButton("Registrar");
+        btnModificarUsuario = new JButton("Modificar");
+        btnEliminarUsuario = new JButton("Eliminar");
+        botones.add(btnRegistrarUsuario);
+        botones.add(btnModificarUsuario);
+        botones.add(btnEliminarUsuario);
+        form.add(botones);
+        
+        String[] columnas = {"Nombre", "Correo", "Carné", "Calificaciones"};
+        modeloTablaUsuarios = new DefaultTableModel(columnas, 0);
+        tablaUsuarios = new JTable(modeloTablaUsuarios);
+        JScrollPane scroll = new JScrollPane(tablaUsuarios);
+        
+        panel.add(form, BorderLayout.NORTH);
+        panel.add(scroll, BorderLayout.CENTER);
+        
+        return panel;
+    }
+    
+    private JPanel crearPanelRetos() {
+        JPanel panel = new JPanel(new BorderLayout());
+        
+        JPanel form = new JPanel(new GridLayout(5, 2, 5, 5));
+        form.setBorder(new TitledBorder("Datos del Reto"));
+        
+        form.add(new JLabel("Nombre:"));
+        txtNombreReto = new JTextField();
+        form.add(txtNombreReto);
+        
+        form.add(new JLabel("Descripción:"));
+        txtDescripcionReto = new JTextField();
+        form.add(txtDescripcionReto);
+        
+        form.add(new JLabel("Puntos:"));
+        txtPuntosReto = new JTextField();
+        form.add(txtPuntosReto);
+        
+        form.add(new JLabel("Activo:"));
+        checkEstadoReto = new JCheckBox();
+        form.add(checkEstadoReto);
+        
+        JPanel botones = new JPanel();
+        btnCrearReto = new JButton("Crear");
+        btnModificarReto = new JButton("Modificar");
+        btnEliminarReto = new JButton("Eliminar");
+        botones.add(btnCrearReto);
+        botones.add(btnModificarReto);
+        botones.add(btnEliminarReto);
+        form.add(botones);
+        
+        String[] columnas = {"Nombre", "Descripción", "Puntos", "Estado"};
+        modeloTablaRetos = new DefaultTableModel(columnas, 0);
+        tablaRetos = new JTable(modeloTablaRetos);
+        JScrollPane scroll = new JScrollPane(tablaRetos);
+        
+        panel.add(form, BorderLayout.NORTH);
+        panel.add(scroll, BorderLayout.CENTER);
+        
+        return panel;
+    }
+    
+    private JPanel crearPanelCalificaciones() {
+        JPanel panel = new JPanel(new BorderLayout());
+        
+        JPanel form = new JPanel(new GridLayout(4, 2, 5, 5));
+        form.setBorder(new TitledBorder("Asignar Calificación"));
+        
+        form.add(new JLabel("Usuario:"));
+        comboUsuarios = new JComboBox<>();
+        form.add(comboUsuarios);
+        
+        form.add(new JLabel("Reto:"));
+        comboRetos = new JComboBox<>();
+        form.add(comboRetos);
+        
+        form.add(new JLabel("Puntuación:"));
+        txtPuntuacion = new JTextField();
+        form.add(txtPuntuacion);
+        
+        btnAsignarCalificacion = new JButton("Asignar");
+        form.add(btnAsignarCalificacion);
+        
+        String[] columnas = {"Usuario", "Reto", "Puntuación"};
+        modeloTablaCalificaciones = new DefaultTableModel(columnas, 0);
+        tablaCalificaciones = new JTable(modeloTablaCalificaciones);
+        JScrollPane scroll = new JScrollPane(tablaCalificaciones);
+        
+        panel.add(form, BorderLayout.NORTH);
+        panel.add(scroll, BorderLayout.CENTER);
+        
+        return panel;
+    }
+    
+    private JPanel crearPanelAdmin() {
+        JPanel panel = new JPanel(new BorderLayout());
+        
+        JPanel botones = new JPanel(new FlowLayout());
+        btnAsignarUsuario = new JButton("Asignar Usuario");
+        btnDesasignarUsuario = new JButton("Desasignar Usuario");
+        btnPunteoRetos = new JButton("Reporte Puntuación");
+        botones.add(btnAsignarUsuario);
+        botones.add(btnDesasignarUsuario);
+        botones.add(btnPunteoRetos);
+        
+        areaResultados = new JTextArea();
+        areaResultados.setEditable(false);
+        JScrollPane scroll = new JScrollPane(areaResultados);
+        
+        panel.add(botones, BorderLayout.NORTH);
+        panel.add(scroll, BorderLayout.CENTER);
+        
+        return panel;
+    }
+    
+    private void configurarEventos() {
+        btnRegistrarUsuario.addActionListener(e -> registrarUsuario());
+        btnModificarUsuario.addActionListener(e -> modificarUsuario());
+        btnEliminarUsuario.addActionListener(e -> eliminarUsuario());
+        
+        btnCrearReto.addActionListener(e -> crearReto());
+        btnModificarReto.addActionListener(e -> modificarReto());
+        btnEliminarReto.addActionListener(e -> eliminarReto());
+        
+        btnAsignarCalificacion.addActionListener(e -> asignarCalificacion());
+        
+        btnAsignarUsuario.addActionListener(e -> asignarUsuarioAdmin());
+        btnDesasignarUsuario.addActionListener(e -> desasignarUsuarioAdmin());
+        btnPunteoRetos.addActionListener(e -> generarReporte());
+        
+        tablaUsuarios.getSelectionModel().addListSelectionListener(e -> {
+            int fila = tablaUsuarios.getSelectedRow();
+            if (fila >= 0) {
+                Usuario u = usuarios.get(fila);
+                txtNombreUsuario.setText(u.getNombre());
+                txtCorreo.setText(u.getCorreo());
+                txtCarne.setText(u.getCarné());
+            }
+        });
+        
+        tablaRetos.getSelectionModel().addListSelectionListener(e -> {
+            int fila = tablaRetos.getSelectedRow();
+            if (fila >= 0) {
+                Retos r = retos.get(fila);
+                txtNombreReto.setText(r.getNombreReto());
+                txtDescripcionReto.setText(r.getDescripcion());
+                txtPuntosReto.setText(String.valueOf(r.getPuntos()));
+                checkEstadoReto.setSelected(r.isEstado());
+            }
+        });
+    }
+    
+    private void registrarUsuario() {
+        String nombre = txtNombreUsuario.getText();
+        String correo = txtCorreo.getText();
+        String contra = txtContra.getText();
+        String carne = txtCarne.getText();
+        
+        if (!nombre.isEmpty() && !correo.isEmpty() && !contra.isEmpty() && !carne.isEmpty()) {
+            Usuario usuario = new Usuario(nombre, correo, contra, carne);
+            usuarios.add(usuario);
+            actualizarTablaUsuarios();
+            actualizarCombos();
+            limpiarCamposUsuario();
+            JOptionPane.showMessageDialog(this, "Usuario registrado");
+        }
+    }
+    
+    private void modificarUsuario() {
+        int fila = tablaUsuarios.getSelectedRow();
+        if (fila >= 0) {
+            Usuario u = usuarios.get(fila);
+            u.setNombre(txtNombreUsuario.getText());
+            u.setCorreo(txtCorreo.getText());
+            u.setContra(txtContra.getText());
+            u.setCarné(txtCarne.getText());
+            actualizarTablaUsuarios();
+        }
+    }
+    
+    private void eliminarUsuario() {
+        int fila = tablaUsuarios.getSelectedRow();
+        if (fila >= 0) {
+            usuarios.remove(fila);
+            actualizarTablaUsuarios();
+            actualizarCombos();
+            limpiarCamposUsuario();
+        }
+    }
+    
+    private void crearReto() {
+        String nombre = txtNombreReto.getText();
+        String desc = txtDescripcionReto.getText();
+        try {
+            int puntos = Integer.parseInt(txtPuntosReto.getText());
+            boolean estado = checkEstadoReto.isSelected();
+            
+            Retos reto = new Retos(nombre, desc, puntos, estado);
+            retos.add(reto);
+            actualizarTablaRetos();
+            actualizarCombos();
+            limpiarCamposReto();
+            JOptionPane.showMessageDialog(this, "Reto creado");
+        } catch (NumberFormatException e) {
+            JOptionPane.showMessageDialog(this, "Puntos debe ser número");
+        }
+    }
+    
+    private void modificarReto() {
+        int fila = tablaRetos.getSelectedRow();
+        if (fila >= 0) {
+            try {
+                Retos r = retos.get(fila);
+                r.setReto(txtNombreReto.getText(), txtDescripcionReto.getText(), checkEstadoReto.isSelected());
+                r.setPuntos(Integer.parseInt(txtPuntosReto.getText()));
+                actualizarTablaRetos();
+            } catch (NumberFormatException e) {
+                JOptionPane.showMessageDialog(this, "Puntos debe ser número");
+            }
+        }
+    }
+    
+    private void eliminarReto() {
+        int fila = tablaRetos.getSelectedRow();
+        if (fila >= 0) {
+            retos.remove(fila);
+            actualizarTablaRetos();
+            actualizarCombos();
+            limpiarCamposReto();
+        }
+    }
+    
+    private void asignarCalificacion() {
+        int iUsuario = comboUsuarios.getSelectedIndex();
+        int iReto = comboRetos.getSelectedIndex();
+        
+        if (iUsuario >= 0 && iReto >= 0) {
+            try {
+                int puntuacion = Integer.parseInt(txtPuntuacion.getText());
+                Usuario u = usuarios.get(iUsuario);
+                Retos r = retos.get(iReto);
+                
+                Calificacion calif = new Calificacion(u, r, puntuacion);
+                calificaciones.add(calif);
+                actualizarTablaCalificaciones();
+                txtPuntuacion.setText("");
+                JOptionPane.showMessageDialog(this, "Calificación asignada");
+            } catch (NumberFormatException e) {
+                JOptionPane.showMessageDialog(this, "Puntuación debe ser número");
+            }
+        }
+    }
+    
+    private void asignarUsuarioAdmin() {
+        admin.asignarUsuario();
+        areaResultados.append("Usuario asignado\n");
+    }
+    
+    private void desasignarUsuarioAdmin() {
+        admin.desasignarUsuario();
+        areaResultados.append("Usuario desasignado\n");
+    }
+    
+    private void generarReporte() {
+        admin.punteoRetos();
+        areaResultados.append("=== REPORTE ===\n");
+        for (Usuario u : usuarios) {
+            int total = 0;
+            int count = 0;
+            for (Calificacion c : calificaciones) {
+                if (c.getPersona().equals(u)) {
+                    total += c.getCalificacion();
+                    count++;
+                }
+            }
+            areaResultados.append(u.getNombre() + ": " + count + " retos, " + total + " puntos\n");
+        }
+        areaResultados.append("===============\n");
+    }
+    
+    private void actualizarTablaUsuarios() {
+        modeloTablaUsuarios.setRowCount(0);
+        for (Usuario u : usuarios) {
+            modeloTablaUsuarios.addRow(new Object[]{u.getNombre(), u.getCorreo(), u.getCarné(), u.calificacion.size()});
+        }
+    }
+    
+    private void actualizarTablaRetos() {
+        modeloTablaRetos.setRowCount(0);
+        for (Retos r : retos) {
+            modeloTablaRetos.addRow(new Object[]{r.getNombreReto(), r.getDescripcion(), r.getPuntos(), r.isEstado() ? "Activo" : "Inactivo"});
+        }
+    }
+    
+    private void actualizarTablaCalificaciones() {
+        modeloTablaCalificaciones.setRowCount(0);
+        for (Calificacion c : calificaciones) {
+            modeloTablaCalificaciones.addRow(new Object[]{c.getPersona().getNombre(), c.getReto().getNombreReto(), c.getCalificacion()});
+        }
+    }
+    
+    private void actualizarCombos() {
+        comboUsuarios.removeAllItems();
+        comboRetos.removeAllItems();
+        
+        for (Usuario u : usuarios) {
+            comboUsuarios.addItem(u.getNombre());
+        }
+        
+        for (Retos r : retos) {
+            comboRetos.addItem(r.getNombreReto());
+        }
+    }
+    
+    private void limpiarCamposUsuario() {
+        txtNombreUsuario.setText("");
+        txtCorreo.setText("");
+        txtContra.setText("");
+        txtCarne.setText("");
+    }
+    
+    private void limpiarCamposReto() {
+        txtNombreReto.setText("");
+        txtDescripcionReto.setText("");
+        txtPuntosReto.setText("");
+        checkEstadoReto.setSelected(false);
+    }
+    
+    public static void main(String[] args) {
+        System.out.println("Use Principal.Main para ejecutar la aplicación");
+    }
+}
