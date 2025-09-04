@@ -1,3 +1,5 @@
+package Modelo;
+
 import java.util.List;
 
 public class Grupo {
@@ -15,7 +17,7 @@ public class Grupo {
         return participantes.remove(usuario);
     }
 
-    public void asignarDesafio(DesafioAcademico desafio) {
+    public void asignarDesafio(Retos desafio) {
         this.reto = desafio.toString();
     }
 

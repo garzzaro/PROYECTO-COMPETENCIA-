@@ -2,11 +2,12 @@ package Modelo;
 public class Calificacion{
 
     private Usuario persona;
-    private Reto reto;
+    private Retos reto;
     private int puntuacionFinal;
 
 
     public int sumaCalificacion(){
+        return 0;
     }
 
     public int getCalificacion(){
