@@ -22,9 +22,6 @@ public class Controlador {
         return admin.registrarReto(nombre, descripcion, puntos, estado);
     }
 
-
-
-    /*
     public boolean agregarUsuario(String nombre, String correo, String carne){
         if (!nombre.isEmpty() && !correo.isEmpty() && !carne.isEmpty()) {
             Usuario usuario = new Usuario(nombre, correo, "123", carne);
@@ -46,6 +43,6 @@ public class Controlador {
         } else {
             return false;
         }
-    }*/
+    }
 
 }

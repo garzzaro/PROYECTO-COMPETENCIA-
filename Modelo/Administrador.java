@@ -73,11 +73,11 @@ public class Administrador {
     public List<Grupo> getGrupos() {
         return grupos;
     }
-/*
+
     public void mostrarResumen() {
         System.out.println("=== ADMINISTRADOR ===");
         System.out.println("Usuarios registrados: " + usuarios.size());
         System.out.println("Retos disponibles: " + retos.size());
         System.out.println("Grupos creados: " + grupos.size());
-    }  */
+    }  
 }

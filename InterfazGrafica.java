@@ -8,13 +8,8 @@ import java.lang.reflect.Field;
 import java.util.ArrayList;
 import java.util.List;
 
-/**
- * InterfazGrafica (Swing)
- * Compatible con las clases que enviaste en Modelo.*
- * 
- * - Crea usuarios, retos y grupos usando Administrador
- * - Lista tablas con reflexión para leer campos privados cuando no hay getters
- */
+
+ InterfazGrafica (Swing)
 public class InterfazGrafica extends JFrame {
 
     // === Modelo de dominio ===
@@ -195,7 +190,7 @@ public class InterfazGrafica extends JFrame {
             JOptionPane.showMessageDialog(this, "Escribe un nombre para el grupo.", "Faltan datos", JOptionPane.WARNING_MESSAGE);
             return;
         }
-        Grupo creado = admin.crearGrupo(nombre); // tu Admin acepta solo (String)
+        Grupo creado = admin.crearGrupo(nombre); 
         if (creado != null) {
             gNombre.setText("");
             refrescarGrupos();
