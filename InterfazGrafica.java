@@ -2,7 +2,7 @@ import java.awt.*;
 import java.awt.event.ActionEvent;
 import java.sql.*;
 import javax.swing.*;
-import javax.swing.table.DefaultTableModel;          // <<< JBDC
+import javax.swing.table.DefaultTableModel;
 
 public class InterfazGrafica extends JFrame {
 
@@ -12,6 +12,7 @@ public class InterfazGrafica extends JFrame {
     private final JTextField uNombre = new JTextField();
     private final JTextField uCorreo = new JTextField();
     private final JTextField uCarne  = new JTextField();
+    private final JPasswordField uContra = new JPasswordField();
     private final DefaultTableModel uModel = new DefaultTableModel(
             new String[]{"ID", "Nombre", "Correo", "Carné", "Creado"}, 0) {
         public boolean isCellEditable(int r,int c){ return false; }
@@ -36,6 +37,12 @@ public class InterfazGrafica extends JFrame {
         public boolean isCellEditable(int r,int c){ return false; }
     };
     private final JTable gTable = new JTable(gModel);
+
+    // === Sesión actual ===
+    private String usuarioActual = null;
+    private final JLabel lblSesionUsuarios = new JLabel("Usuario actual: (no hay sesión)");
+    private final JLabel lblSesionRetos    = new JLabel("Usuario actual: (no hay sesión)");
+    private final JLabel lblSesionGrupos   = new JLabel("Usuario actual: (no hay sesión)");
 
     public InterfazGrafica() {
         super("PROYECTO-COMPETENCIA — Interfaz (MySQL)");
@@ -73,13 +80,17 @@ public class InterfazGrafica extends JFrame {
         c.gridx=0;c.gridy=row; form.add(new JLabel("Carné"), c);
         c.gridx=1;c.gridy=row; form.add(uCarne, c); row++;
 
-        JButton add = new JButton("Registrar usuario");
-        add.addActionListener(this::onAgregarUsuario);
-        c.gridx=1;c.gridy=row; form.add(add, c);
+        c.gridx=0;c.gridy=row; form.add(new JLabel("Contraseña"), c);
+        c.gridx=1;c.gridy=row; form.add(uContra, c); row++;
+
+        JButton login = new JButton("Iniciar sesión / Registrar");
+        login.addActionListener(this::onLoginUsuario);
+        c.gridx=1;c.gridy=row; form.add(login, c);
 
         JPanel panel = new JPanel(new BorderLayout());
         panel.add(form, BorderLayout.NORTH);
         panel.add(new JScrollPane(uTable), BorderLayout.CENTER);
+        panel.add(lblSesionUsuarios, BorderLayout.SOUTH);
         return panel;
     }
 
@@ -109,6 +120,7 @@ public class InterfazGrafica extends JFrame {
         JPanel panel = new JPanel(new BorderLayout());
         panel.add(form, BorderLayout.NORTH);
         panel.add(new JScrollPane(rTable), BorderLayout.CENTER);
+        panel.add(lblSesionRetos, BorderLayout.SOUTH);
         return panel;
     }
 
@@ -129,38 +141,65 @@ public class InterfazGrafica extends JFrame {
         JPanel panel = new JPanel(new BorderLayout());
         panel.add(form, BorderLayout.NORTH);
         panel.add(new JScrollPane(gTable), BorderLayout.CENTER);
+        panel.add(lblSesionGrupos, BorderLayout.SOUTH);
         return panel;
     }
 
-    /* ===================== ACCIONES (INSERT en MySQL) ===================== */
+    /* ===================== LOGIN / REGISTRO ===================== */
 
-    private void onAgregarUsuario(ActionEvent e) {
+    private void onLoginUsuario(ActionEvent e) {
         String nombre = uNombre.getText().trim();
         String correo = uCorreo.getText().trim();
         String carne  = uCarne.getText().trim();
+        String contra = new String(uContra.getPassword()).trim();
 
-        if (nombre.isEmpty() || correo.isEmpty() || carne.isEmpty()) {
+        if (nombre.isEmpty() || correo.isEmpty() || carne.isEmpty() || contra.isEmpty()) {
             warn("Complete todos los campos.");
             return;
         }
 
-        final String sql = "INSERT INTO usuarios(nombre, correo, contra, carne) VALUES(?,?,?,?)";
-        try (Connection cn = BD.conectar();
-             PreparedStatement ps = cn.prepareStatement(sql)) {
-            ps.setString(1, nombre);
-            ps.setString(2, correo);
-            ps.setString(3, "123");     // coloca aquí tu política de contraseña
-            ps.setString(4, carne);
-            ps.executeUpdate();
-            info("Usuario registrado.");
-            uNombre.setText(""); uCorreo.setText(""); uCarne.setText("");
+        try (Connection cn = BD.conectar()) {
+            final String checkSQL = "SELECT * FROM usuarios WHERE correo=? OR carne=?";
+            try (PreparedStatement check = cn.prepareStatement(checkSQL)) {
+                check.setString(1, correo);
+                check.setString(2, carne);
+                ResultSet rs = check.executeQuery();
+
+                if (rs.next()) {
+                    // Usuario existe → verificar password (campo en BD: password)
+                    String passBD = rs.getString("password");
+                    if (passBD.equals(contra)) {
+                        usuarioActual = rs.getString("nombre");
+                        info("Bienvenido, " + usuarioActual);
+                    } else {
+                        error("Contraseña incorrecta.");
+                        return;
+                    }
+                } else {
+                    // Usuario no existe → registrar
+                    final String insertSQL = "INSERT INTO usuarios(nombre, correo, carne, password) VALUES(?,?,?,?)";
+                    try (PreparedStatement ps = cn.prepareStatement(insertSQL)) {
+                        ps.setString(1, nombre);
+                        ps.setString(2, correo);
+                        ps.setString(3, carne);
+                        ps.setString(4, contra);
+                        ps.executeUpdate();
+                        usuarioActual = nombre;
+                        info("Usuario registrado e inició sesión correctamente.");
+                    }
+                }
+            }
             refrescarUsuarios();
-        } catch (SQLIntegrityConstraintViolationException d) {
-            error("Correo o carné ya existen.");
+            refrescarRetos();
+            refrescarGrupos();
+            limpiarCamposLogin();
+            actualizarEtiquetasSesion();
         } catch (SQLException ex) {
             error("Error BD: " + ex.getMessage());
         }
     }
+
+    /* ===================== ACCIONES (INSERT en MySQL) ===================== */
 
     private void onAgregarReto(ActionEvent e) {
         String nombre = rNombre.getText().trim();
@@ -173,7 +212,7 @@ public class InterfazGrafica extends JFrame {
             return;
         }
 
-        final String sql = "INSERT INTO retos(nombre_reto, descripcion, puntos, estado) VALUES(?,?,?,?)";
+        final String sql = "INSERT INTO retos(nombre, descripcion, puntos, estado) VALUES(?,?,?,?)";
         try (Connection cn = BD.conectar();
              PreparedStatement ps = cn.prepareStatement(sql)) {
             ps.setString(1, nombre);
@@ -232,14 +271,14 @@ public class InterfazGrafica extends JFrame {
 
     private void refrescarRetos() {
         clearModel(rModel);
-        final String sql = "SELECT id, nombre_reto, puntos, estado, creado_en FROM retos ORDER BY id DESC";
+        final String sql = "SELECT id, nombre, puntos, estado, creado_en FROM retos ORDER BY id DESC";
         try (Connection cn = BD.conectar();
              PreparedStatement ps = cn.prepareStatement(sql);
              ResultSet rs = ps.executeQuery()) {
             while (rs.next()) {
                 rModel.addRow(new Object[]{
                         rs.getInt("id"),
-                        rs.getString("nombre_reto"),
+                        rs.getString("nombre"),
                         rs.getInt("puntos"),
                         rs.getBoolean("estado"),
                         rs.getTimestamp("creado_en")
@@ -255,7 +294,7 @@ public class InterfazGrafica extends JFrame {
         final String sql =
             "SELECT g.id, g.grupo_nombre, " +
             "       COALESCE(COUNT(gp.usuario_id),0) AS miembros, " +
-            "       (SELECT r.nombre_reto FROM retos r WHERE r.id=g.reto_id) AS reto, " +
+            "       (SELECT r.nombre FROM retos r WHERE r.id=g.reto_id) AS reto, " +
             "       g.reto_finalizado, g.creado_en " +
             "FROM grupos g " +
             "LEFT JOIN grupo_participantes gp ON gp.grupo_id = g.id " +
@@ -284,6 +323,21 @@ public class InterfazGrafica extends JFrame {
     private void clearModel(DefaultTableModel m){
         while(m.getRowCount()>0) m.removeRow(0);
     }
+
+    private void actualizarEtiquetasSesion() {
+        String texto = "Usuario actual: " + (usuarioActual != null ? usuarioActual : "(no hay sesión)");
+        lblSesionUsuarios.setText(texto);
+        lblSesionRetos.setText(texto);
+        lblSesionGrupos.setText(texto);
+    }
+
+    private void limpiarCamposLogin() {
+        uNombre.setText("");
+        uCorreo.setText("");
+        uCarne.setText("");
+        uContra.setText("");
+    }
+
     private void info(String msg){ JOptionPane.showMessageDialog(this, msg, "OK", JOptionPane.INFORMATION_MESSAGE); }
     private void warn(String msg){ JOptionPane.showMessageDialog(this, msg, "Atención", JOptionPane.WARNING_MESSAGE); }
     private void error(String msg){ JOptionPane.showMessageDialog(this, msg, "Error", JOptionPane.ERROR_MESSAGE); }
