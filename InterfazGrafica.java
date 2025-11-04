@@ -1,3 +1,4 @@
+import Modelo.*;
 import java.awt.*;
 import java.awt.event.ActionEvent;
 import java.sql.*;
@@ -8,11 +9,14 @@ public class InterfazGrafica extends JFrame {
 
     private final JTabbedPane tabs = new JTabbedPane();
 
-    // === Usuarios ===
+    // === Usuarios (form) ===
     private final JTextField uNombre = new JTextField();
     private final JTextField uCorreo = new JTextField();
     private final JTextField uCarne  = new JTextField();
     private final JPasswordField uContra = new JPasswordField();
+    private JButton btnLogin;  
+    private JButton btnLogout;
+
     private final DefaultTableModel uModel = new DefaultTableModel(
             new String[]{"ID", "Nombre", "Correo", "Carné", "Creado"}, 0) {
         public boolean isCellEditable(int r,int c){ return false; }
@@ -38,11 +42,16 @@ public class InterfazGrafica extends JFrame {
     };
     private final JTable gTable = new JTable(gModel);
 
-    // === Sesión actual ===
-    private String usuarioActual = null;
+    // === Sesión actual (objetos) ===
+    private Usuario usuarioLogueado = null; // objeto Modelo.Usuario en sesión
+    private Grupo grupoActual = null;       // objeto Modelo.Grupo actual (solo para manejo en la UI)
     private final JLabel lblSesionUsuarios = new JLabel("Usuario actual: (no hay sesión)");
     private final JLabel lblSesionRetos    = new JLabel("Usuario actual: (no hay sesión)");
     private final JLabel lblSesionGrupos   = new JLabel("Usuario actual: (no hay sesión)");
+    private final JLabel lblGrupoActual    = new JLabel("Grupo actual: (ninguno)");
+
+    // Controlador opcional (puedes usarlo o ignorarlo); lo agrego para separar lógica
+    private final Controlador controlador = new Controlador();
 
     public InterfazGrafica() {
         super("PROYECTO-COMPETENCIA — Interfaz (MySQL)");
@@ -60,6 +69,9 @@ public class InterfazGrafica extends JFrame {
         refrescarUsuarios();
         refrescarRetos();
         refrescarGrupos();
+
+        // actualizar etiquetas (color)
+        actualizarEtiquetasSesion();
 
         setVisible(true);
     }
@@ -83,14 +95,25 @@ public class InterfazGrafica extends JFrame {
         c.gridx=0;c.gridy=row; form.add(new JLabel("Contraseña"), c);
         c.gridx=1;c.gridy=row; form.add(uContra, c); row++;
 
-        JButton login = new JButton("Iniciar sesión / Registrar");
-        login.addActionListener(this::onLoginUsuario);
-        c.gridx=1;c.gridy=row; form.add(login, c);
+        btnLogin = new JButton("Iniciar sesión / Registrar");
+        btnLogin.addActionListener(this::onLoginUsuario);
+        c.gridx=1;c.gridy=row; form.add(btnLogin, c);
+
+        // logout
+        btnLogout = new JButton("Cerrar sesión");
+        btnLogout.addActionListener(e -> cerrarSesion());
+        c.gridx=1; c.gridy = ++row;
+        form.add(btnLogout, c);
 
         JPanel panel = new JPanel(new BorderLayout());
         panel.add(form, BorderLayout.NORTH);
         panel.add(new JScrollPane(uTable), BorderLayout.CENTER);
-        panel.add(lblSesionUsuarios, BorderLayout.SOUTH);
+
+        JPanel south = new JPanel(new BorderLayout());
+        south.add(lblSesionUsuarios, BorderLayout.NORTH);
+        south.add(lblGrupoActual, BorderLayout.SOUTH);
+        panel.add(south, BorderLayout.SOUTH);
+
         return panel;
     }
 
@@ -138,10 +161,21 @@ public class InterfazGrafica extends JFrame {
         add.addActionListener(this::onCrearGrupo);
         c.gridx=1;c.gridy=row; form.add(add, c);
 
+        // boton unirse
+        JButton join = new JButton("Unirse a grupo seleccionado");
+        join.addActionListener(e -> onUnirseGrupo());
+        c.gridx=1; c.gridy = ++row;
+        form.add(join, c);
+
         JPanel panel = new JPanel(new BorderLayout());
         panel.add(form, BorderLayout.NORTH);
         panel.add(new JScrollPane(gTable), BorderLayout.CENTER);
-        panel.add(lblSesionGrupos, BorderLayout.SOUTH);
+
+        JPanel south = new JPanel(new GridLayout(2,1));
+        south.add(lblSesionGrupos);
+        south.add(lblGrupoActual);
+        panel.add(south, BorderLayout.SOUTH);
+
         return panel;
     }
 
@@ -158,6 +192,7 @@ public class InterfazGrafica extends JFrame {
             return;
         }
 
+        // Conectar a BD y verificar/registrar (contraseña se guarda tal cual en tu BD actual)
         try (Connection cn = BD.conectar()) {
             final String checkSQL = "SELECT * FROM usuarios WHERE correo=? OR carne=?";
             try (PreparedStatement check = cn.prepareStatement(checkSQL)) {
@@ -169,34 +204,59 @@ public class InterfazGrafica extends JFrame {
                     // Usuario existe → verificar password (campo en BD: password)
                     String passBD = rs.getString("password");
                     if (passBD.equals(contra)) {
-                        usuarioActual = rs.getString("nombre");
-                        info("Bienvenido, " + usuarioActual);
+                        // crear objeto Usuario en memoria
+                        usuarioLogueado = new Usuario(
+                                rs.getString("nombre"),
+                                rs.getString("correo"),
+                                contra,                       // pasamos la contra tal cual; modelo la encripta internamente
+                                rs.getString("carne")
+                        );
+                        info("Bienvenido, " + rs.getString("nombre"));
                     } else {
                         error("Contraseña incorrecta.");
                         return;
                     }
                 } else {
-                    // Usuario no existe → registrar
+                    // Usuario no existe → registrar en BD
                     final String insertSQL = "INSERT INTO usuarios(nombre, correo, carne, password) VALUES(?,?,?,?)";
-                    try (PreparedStatement ps = cn.prepareStatement(insertSQL)) {
+                    try (PreparedStatement ps = cn.prepareStatement(insertSQL, Statement.RETURN_GENERATED_KEYS)) {
                         ps.setString(1, nombre);
                         ps.setString(2, correo);
                         ps.setString(3, carne);
                         ps.setString(4, contra);
                         ps.executeUpdate();
-                        usuarioActual = nombre;
+
+                        // crear objeto usuario en memoria
+                        usuarioLogueado = new Usuario(nombre, correo, contra, carne);
+
                         info("Usuario registrado e inició sesión correctamente.");
                     }
                 }
             }
+
+            // Deshabilitar botón de login y habilitar logout (si quieres esconderlo en lugar de deshabilitar, puedes setVisible(false))
+            if (btnLogin != null) btnLogin.setEnabled(false);
+
+            // Refrescar tablas y labels
             refrescarUsuarios();
             refrescarRetos();
             refrescarGrupos();
             limpiarCamposLogin();
             actualizarEtiquetasSesion();
+
         } catch (SQLException ex) {
             error("Error BD: " + ex.getMessage());
         }
+    }
+
+    private void cerrarSesion() {
+        usuarioLogueado = null;
+        grupoActual = null;
+        info("Sesión cerrada.");
+
+        if (btnLogin != null) btnLogin.setEnabled(true);
+
+        actualizarEtiquetasSesion();
     }
 
     /* ===================== ACCIONES (INSERT en MySQL) ===================== */
@@ -229,19 +289,108 @@ public class InterfazGrafica extends JFrame {
     }
 
     private void onCrearGrupo(ActionEvent e) {
+        if (usuarioLogueado == null) {
+            error("Debe iniciar sesión para crear un grupo.");
+            return;
+        }
+
         String nombre = gNombre.getText().trim();
         if (nombre.isEmpty()) { warn("Escribe un nombre."); return; }
 
-        final String sql = "INSERT INTO grupos(grupo_nombre) VALUES(?)";
-        try (Connection cn = BD.conectar();
-             PreparedStatement ps = cn.prepareStatement(sql)) {
-            ps.setString(1, nombre);
-            ps.executeUpdate();
-            info("Grupo creado.");
+        try (Connection cn = BD.conectar()) {
+
+            // 1) Insertar grupo y obtener id generado
+            String sqlGrupo = "INSERT INTO grupos(nombre) VALUES(?)";
+            PreparedStatement psGrupo = cn.prepareStatement(sqlGrupo, Statement.RETURN_GENERATED_KEYS);
+            psGrupo.setString(1, nombre);
+            psGrupo.executeUpdate();
+
+            ResultSet gen = psGrupo.getGeneratedKeys();
+            if (!gen.next()) {
+                throw new SQLException("No se obtuvo id de grupo.");
+            }
+            int grupoID = gen.getInt(1);
+
+            // 2) Obtener id del usuario actual
+            int usuarioID = obtenerIDUsuario(usuarioLogueado.getCorreo(), cn);
+
+            // 3) Insertar en grupo_participantes (creador es participante)
+            String sqlP = "INSERT INTO grupo_participantes(grupo_id, usuario_id) VALUES(?,?)";
+            try (PreparedStatement psP = cn.prepareStatement(sqlP)) {
+                psP.setInt(1, grupoID);
+                psP.setInt(2, usuarioID);
+                psP.executeUpdate();
+            }
+
+            // 4) Insertar en grupo_admin (creador es admin)
+            String sqlA = "INSERT INTO grupo_admin(grupo_id, usuario_id) VALUES(?,?)";
+            try (PreparedStatement psA = cn.prepareStatement(sqlA)) {
+                psA.setInt(1, grupoID);
+                psA.setInt(2, usuarioID);
+                psA.executeUpdate();
+            }
+
+            // 5) Guardar grupo actual en memoria (objeto simple para UI)
+            grupoActual = new Grupo(nombre);
+            lblGrupoActual.setText("Grupo actual: " + grupoActual.getGrupoNombre());
+
+            info("Grupo creado correctamente.");
+
             gNombre.setText("");
             refrescarGrupos();
+
         } catch (SQLIntegrityConstraintViolationException d) {
-            error("El nombre del grupo ya existe.");
+            error("El nombre del grupo ya existe o viola una restricción.");
+        } catch (SQLException ex) {
+            error("Error BD: " + ex.getMessage());
+        }
+    }
+
+    private void onUnirseGrupo() {
+        if (usuarioLogueado == null) {
+            error("Debe iniciar sesión.");
+            return;
+        }
+
+        int row = gTable.getSelectedRow();
+        if (row == -1) {
+            warn("Seleccione un grupo de la tabla.");
+            return;
+        }
+
+        int grupoID = (int) gModel.getValueAt(row, 0);
+        String nombreGrupo = (String) gModel.getValueAt(row, 1);
+
+        try (Connection cn = BD.conectar()) {
+            int userID = obtenerIDUsuario(usuarioLogueado.getCorreo(), cn);
+
+            // evitar duplicados
+            PreparedStatement check = cn.prepareStatement(
+                "SELECT * FROM grupo_participantes WHERE grupo_id=? AND usuario_id=?"
+            );
+            check.setInt(1, grupoID);
+            check.setInt(2, userID);
+            ResultSet rs = check.executeQuery();
+            if (rs.next()) {
+                warn("Ya eres miembro de este grupo.");
+                return;
+            }
+
+            // Insertar participante
+            PreparedStatement join = cn.prepareStatement(
+                "INSERT INTO grupo_participantes(grupo_id, usuario_id) VALUES(?,?)"
+            );
+            join.setInt(1, grupoID);
+            join.setInt(2, userID);
+            join.executeUpdate();
+
+            // actualizar grupo actual en UI
+            grupoActual = new Grupo(nombreGrupo);
+            lblGrupoActual.setText("Grupo actual: " + grupoActual.getGrupoNombre());
+
+            info("Te uniste al grupo correctamente.");
+            refrescarGrupos();
+
         } catch (SQLException ex) {
             error("Error BD: " + ex.getMessage());
         }
@@ -292,13 +441,13 @@ public class InterfazGrafica extends JFrame {
     private void refrescarGrupos() {
         clearModel(gModel);
         final String sql =
-            "SELECT g.id, g.grupo_nombre, " +
+            "SELECT g.id, g.nombre AS grupo_nombre, " +
             "       COALESCE(COUNT(gp.usuario_id),0) AS miembros, " +
-            "       (SELECT r.nombre FROM retos r WHERE r.id=g.reto_id) AS reto, " +
+            "       (SELECT r.nombre FROM retos r WHERE r.id=g.reto_asignado) AS reto, " +
             "       g.reto_finalizado, g.creado_en " +
             "FROM grupos g " +
             "LEFT JOIN grupo_participantes gp ON gp.grupo_id = g.id " +
-            "GROUP BY g.id, g.grupo_nombre, g.reto_id, g.reto_finalizado, g.creado_en " +
+            "GROUP BY g.id, g.nombre, g.reto_asignado, g.reto_finalizado, g.creado_en " +
             "ORDER BY g.id DESC";
         try (Connection cn = BD.conectar();
              PreparedStatement ps = cn.prepareStatement(sql);
@@ -324,11 +473,27 @@ public class InterfazGrafica extends JFrame {
         while(m.getRowCount()>0) m.removeRow(0);
     }
 
+    private int obtenerIDUsuario(String correo, Connection cn) throws SQLException {
+        PreparedStatement ps = cn.prepareStatement("SELECT id FROM usuarios WHERE correo=?");
+        ps.setString(1, correo);
+        ResultSet rs = ps.executeQuery();
+        if (rs.next()) return rs.getInt("id");
+        throw new SQLException("Usuario no encontrado para correo: " + correo);
+    }
+
     private void actualizarEtiquetasSesion() {
-        String texto = "Usuario actual: " + (usuarioActual != null ? usuarioActual : "(no hay sesión)");
+        String texto = "Usuario actual: " + (usuarioLogueado != null ? usuarioLogueado.getNombre() : "(no hay sesión)");
         lblSesionUsuarios.setText(texto);
         lblSesionRetos.setText(texto);
         lblSesionGrupos.setText(texto);
+
+        Color color = (usuarioLogueado == null) ? Color.RED : Color.GREEN;
+        lblSesionUsuarios.setForeground(color);
+        lblSesionRetos.setForeground(color);
+        lblSesionGrupos.setForeground(color);
+
+        // actualizar label de grupo actual
+        lblGrupoActual.setText("Grupo actual: " + (grupoActual != null ? grupoActual.getGrupoNombre() : "(ninguno)"));
     }
 
     private void limpiarCamposLogin() {
