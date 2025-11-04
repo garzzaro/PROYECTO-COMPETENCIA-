@@ -49,7 +49,7 @@ public class Administrador {
     }
 
     public Grupo crearGrupo(String nombreGrupo) {
-        Grupo grupo = new Grupo();
+        Grupo grupo = new Grupo(nombreGrupo);
         try {
             java.lang.reflect.Field nombre = grupo.getClass().getDeclaredField("grupoNombre");
             nombre.setAccessible(true);
