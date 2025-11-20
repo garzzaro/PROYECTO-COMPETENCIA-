@@ -16,6 +16,14 @@
 /*!40111 SET @OLD_SQL_NOTES=@@SQL_NOTES, SQL_NOTES=0 */;
 
 --
+-- CREAR DB
+--
+DROP DATABASE IF EXISTS retosdb;
+CREATE DATABASE retosdb CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+USE retosdb;
+
+
+--
 -- Table structure for table `calificaciones`
 --
 
@@ -70,7 +78,6 @@ CREATE TABLE `grupo_admin` (
 
 LOCK TABLES `grupo_admin` WRITE;
 /*!40000 ALTER TABLE `grupo_admin` DISABLE KEYS */;
-INSERT INTO `grupo_admin` VALUES (2,2,1);
 /*!40000 ALTER TABLE `grupo_admin` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -101,7 +108,6 @@ CREATE TABLE `grupo_participantes` (
 
 LOCK TABLES `grupo_participantes` WRITE;
 /*!40000 ALTER TABLE `grupo_participantes` DISABLE KEYS */;
-INSERT INTO `grupo_participantes` VALUES (2,2,1),(3,2,2);
 /*!40000 ALTER TABLE `grupo_participantes` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -188,9 +194,6 @@ CREATE TABLE `usuarios` (
 --
 
 LOCK TABLES `usuarios` WRITE;
-/*!40000 ALTER TABLE `usuarios` DISABLE KEYS */;
-INSERT INTO `usuarios` VALUES (1,'juan','correo1','25','juan','2025-10-30 03:37:49'),(2,'erick','correo2','26','erick','2025-11-04 04:11:11');
-/*!40000 ALTER TABLE `usuarios` ENABLE KEYS */;
 UNLOCK TABLES;
 /*!40103 SET TIME_ZONE=@OLD_TIME_ZONE */;
 
