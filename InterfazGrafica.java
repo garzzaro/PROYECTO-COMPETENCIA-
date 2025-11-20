@@ -2,7 +2,11 @@ import Modelo.*;
 import java.awt.*;
 import java.awt.event.ActionEvent;
 import java.sql.*;
+import java.util.ArrayList;
+import java.util.List;
 import javax.swing.*;
+import javax.swing.event.ChangeEvent;
+import javax.swing.event.ChangeListener;
 import javax.swing.table.DefaultTableModel;
 
 public class InterfazGrafica extends JFrame {
@@ -14,7 +18,7 @@ public class InterfazGrafica extends JFrame {
     private final JTextField uCorreo = new JTextField();
     private final JTextField uCarne  = new JTextField();
     private final JPasswordField uContra = new JPasswordField();
-    private JButton btnLogin;  
+    private JButton btnLogin;
     private JButton btnLogout;
 
     private final DefaultTableModel uModel = new DefaultTableModel(
@@ -23,7 +27,7 @@ public class InterfazGrafica extends JFrame {
     };
     private final JTable uTable = new JTable(uModel);
 
-    // === Retos ===
+    // === Retos === (UI controls nuevos)
     private final JTextField rNombre = new JTextField();
     private final JTextArea  rDesc   = new JTextArea(3, 20);
     private final JSpinner   rPuntos = new JSpinner(new SpinnerNumberModel(10, 0, 1000, 1));
@@ -34,6 +38,19 @@ public class InterfazGrafica extends JFrame {
     };
     private final JTable rTable = new JTable(rModel);
 
+    // Controles adicionales en pestaña Retos (asignar / calificar)
+    private final JComboBox<String> cbAdminGrupos = new JComboBox<>(); // "id - nombre"
+    private final JLabel lblRetoAsignado = new JLabel("Reto asignado: (ninguno)");
+    private final JLabel lblAdminMensaje = new JLabel(""); // mensaje cuando no es admin
+    private final JComboBox<String> cbRetosDisponibles = new JComboBox<>(); // "id - nombre"
+    private final JButton btnAsignarReto = new JButton("Asignar reto al grupo");
+    private final JButton btnQuitarReto  = new JButton("Quitar reto asignado");
+
+    // Calificar usuarios en grupo
+    private final JComboBox<String> cbUsuariosGrupo = new JComboBox<>(); // "id - nombre"
+    private final JSpinner spPuntuacion = new JSpinner(new SpinnerNumberModel(0, 0, 10000, 1));
+    private final JButton btnAgregarCalificacion = new JButton("Agregar calificación");
+
     // === Grupos ===
     private final JTextField gNombre = new JTextField();
     private final DefaultTableModel gModel = new DefaultTableModel(
@@ -41,6 +58,14 @@ public class InterfazGrafica extends JFrame {
         public boolean isCellEditable(int r,int c){ return false; }
     };
     private final JTable gTable = new JTable(gModel);
+
+    // === Puntos (nueva pestaña) ===
+    private final JComboBox<String> cbPuntosGrupos = new JComboBox<>(); // grupos del usuario (id - nombre)
+    private final DefaultTableModel puntosModel = new DefaultTableModel(
+            new String[]{"Usuario ID", "Usuario", "Puntos"}, 0) {
+        public boolean isCellEditable(int r,int c){ return false; }
+    };
+    private final JTable puntosTable = new JTable(puntosModel);
 
     // === Sesión actual (objetos) ===
     private Usuario usuarioLogueado = null; // objeto Modelo.Usuario en sesión
@@ -56,19 +81,24 @@ public class InterfazGrafica extends JFrame {
     public InterfazGrafica() {
         super("PROYECTO-COMPETENCIA — Interfaz (MySQL)");
         setDefaultCloseOperation(EXIT_ON_CLOSE);
-        setSize(1000, 650);
+        setSize(1000, 700);
         setLocationRelativeTo(null);
         setLayout(new BorderLayout());
 
+        // Orden de pestañas requerido: Usuarios, Grupos, Retos, Puntos
         tabs.addTab("Usuarios", buildUsuariosPanel());
-        tabs.addTab("Retos",    buildRetosPanel());
         tabs.addTab("Grupos",   buildGruposPanel());
+        tabs.addTab("Retos",    buildRetosPanel());
+        tabs.addTab("Puntos",   buildPuntosPanel());
         add(tabs, BorderLayout.CENTER);
 
         // Cargar datos desde MySQL
         refrescarUsuarios();
         refrescarRetos();
         refrescarGrupos();
+        cargarAdminGrupos();   // para la pestaña Retos
+        cargarRetosDisponibles();
+        cargarPuntosGrupos();
 
         // actualizar etiquetas (color)
         actualizarEtiquetasSesion();
@@ -118,6 +148,9 @@ public class InterfazGrafica extends JFrame {
     }
 
     private JPanel buildRetosPanel() {
+        JPanel container = new JPanel(new BorderLayout());
+
+        // Form para crear retos (igual que antes)
         JPanel form = new JPanel(new GridBagLayout());
         GridBagConstraints c = new GridBagConstraints();
         c.insets = new Insets(4,4,4,4);
@@ -140,11 +173,71 @@ public class InterfazGrafica extends JFrame {
         add.addActionListener(this::onAgregarReto);
         c.gridx=1;c.gridy=row; form.add(add, c);
 
-        JPanel panel = new JPanel(new BorderLayout());
-        panel.add(form, BorderLayout.NORTH);
-        panel.add(new JScrollPane(rTable), BorderLayout.CENTER);
-        panel.add(lblSesionRetos, BorderLayout.SOUTH);
-        return panel;
+        // Panel de administración de asignación de retos (solo admins)
+        JPanel adminPanel = new JPanel(new GridBagLayout());
+        adminPanel.setBorder(BorderFactory.createTitledBorder("Administrar retos por grupo (solo admins)"));
+        GridBagConstraints a = new GridBagConstraints();
+        a.insets = new Insets(4,4,4,4);
+        a.fill = GridBagConstraints.HORIZONTAL;
+        int ar = 0;
+
+        a.gridx=0; a.gridy=ar; adminPanel.add(new JLabel("Tus grupos (admin)"), a);
+        a.gridx=1; a.gridy=ar++; adminPanel.add(cbAdminGrupos, a);
+
+        a.gridx=0; a.gridy=ar; adminPanel.add(new JLabel("Reto asignado"), a);
+        a.gridx=1; a.gridy=ar++; adminPanel.add(lblRetoAsignado, a);
+
+        // mensaje de admin (rojo) si no es admin de ningun grupo
+        lblAdminMensaje.setForeground(Color.RED);
+        a.gridx=0; a.gridy=ar; adminPanel.add(new JLabel(""), a);
+        a.gridx=1; a.gridy=ar++; adminPanel.add(lblAdminMensaje, a);
+
+        a.gridx=0; a.gridy=ar; adminPanel.add(new JLabel("Retos disponibles"), a);
+        a.gridx=1; a.gridy=ar++; adminPanel.add(cbRetosDisponibles, a);
+
+        a.gridx=1; a.gridy=ar++; adminPanel.add(btnAsignarReto, a);
+        a.gridx=1; a.gridy=ar++; adminPanel.add(btnQuitarReto, a);
+
+        btnAsignarReto.addActionListener(e -> asignarRetoAGrupo());
+        btnQuitarReto.addActionListener(e -> quitarRetoDeGrupo());
+        cbAdminGrupos.addActionListener(e -> actualizarRetoAsignadoYUsuarios());
+
+        // Panel para calificar usuarios del grupo
+        JPanel califPanel = new JPanel(new GridBagLayout());
+        califPanel.setBorder(BorderFactory.createTitledBorder("Calificar usuario del grupo (admin)"));
+        GridBagConstraints b = new GridBagConstraints();
+        b.insets = new Insets(4,4,4,4);
+        b.fill = GridBagConstraints.HORIZONTAL;
+        int br = 0;
+
+        b.gridx=0; b.gridy=br; califPanel.add(new JLabel("Usuario (del grupo)"), b);
+        b.gridx=1; b.gridy=br++; califPanel.add(cbUsuariosGrupo, b);
+
+        b.gridx=0; b.gridy=br; califPanel.add(new JLabel("Puntuación"), b);
+        b.gridx=1; b.gridy=br++; califPanel.add(spPuntuacion, b);
+
+        b.gridx=1; b.gridy=br++; califPanel.add(btnAgregarCalificacion, b);
+
+        btnAgregarCalificacion.addActionListener(e -> agregarCalificacionAUsuario());
+
+        // Arrange top: creation form + admin panels
+        JPanel top = new JPanel(new BorderLayout());
+        top.add(form, BorderLayout.WEST);
+
+        JPanel eastStack = new JPanel(new GridLayout(2,1));
+        eastStack.add(adminPanel);
+        eastStack.add(califPanel);
+        top.add(eastStack, BorderLayout.CENTER);
+
+        container.add(top, BorderLayout.NORTH);
+
+        // Table retos
+        container.add(new JScrollPane(rTable), BorderLayout.CENTER);
+
+        // bottom: session label
+        container.add(lblSesionRetos, BorderLayout.SOUTH);
+
+        return container;
     }
 
     private JPanel buildGruposPanel() {
@@ -179,6 +272,20 @@ public class InterfazGrafica extends JFrame {
         return panel;
     }
 
+    private JPanel buildPuntosPanel() {
+        JPanel panel = new JPanel(new BorderLayout());
+        JPanel top = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        top.add(new JLabel("Seleccionar grupo"));
+        top.add(cbPuntosGrupos);
+        JButton btnRefresh = new JButton("Actualizar puntos");
+        btnRefresh.addActionListener(e -> refrescarPuntos());
+        top.add(btnRefresh);
+        panel.add(top, BorderLayout.NORTH);
+
+        panel.add(new JScrollPane(puntosTable), BorderLayout.CENTER);
+        return panel;
+    }
+
     /* ===================== LOGIN / REGISTRO ===================== */
 
     private void onLoginUsuario(ActionEvent e) {
@@ -192,7 +299,7 @@ public class InterfazGrafica extends JFrame {
             return;
         }
 
-        // Conectar a BD y verificar/registrar (contraseña se guarda tal cual en tu BD actual)
+        // Usar controlador o lógica in-place (similar a tu código)
         try (Connection cn = BD.conectar()) {
             final String checkSQL = "SELECT * FROM usuarios WHERE correo=? OR carne=?";
             try (PreparedStatement check = cn.prepareStatement(checkSQL)) {
@@ -203,12 +310,12 @@ public class InterfazGrafica extends JFrame {
                 if (rs.next()) {
                     // Usuario existe → verificar password (campo en BD: password)
                     String passBD = rs.getString("password");
-                    if (passBD.equals(contra)) {
-                        // crear objeto Usuario en memoria
+                    if (passBD.equals(contra) || new Usuario(rs.getString("nombre"), rs.getString("correo"), contra, rs.getString("carne")).verificarContra(contra)) {
+                        // crear objeto Usuario en memoria (usando constructor que encripta internamente)
                         usuarioLogueado = new Usuario(
                                 rs.getString("nombre"),
                                 rs.getString("correo"),
-                                contra,                       // pasamos la contra tal cual; modelo la encripta internamente
+                                contra,
                                 rs.getString("carne")
                         );
                         info("Bienvenido, " + rs.getString("nombre"));
@@ -226,7 +333,6 @@ public class InterfazGrafica extends JFrame {
                         ps.setString(4, contra);
                         ps.executeUpdate();
 
-                        // crear objeto usuario en memoria
                         usuarioLogueado = new Usuario(nombre, correo, contra, carne);
 
                         info("Usuario registrado e inició sesión correctamente.");
@@ -234,15 +340,19 @@ public class InterfazGrafica extends JFrame {
                 }
             }
 
-            // Deshabilitar botón de login y habilitar logout (si quieres esconderlo en lugar de deshabilitar, puedes setVisible(false))
             if (btnLogin != null) btnLogin.setEnabled(false);
 
-            // Refrescar tablas y labels
+            // Refrescar vistas y cargas relacionadas con permisos
             refrescarUsuarios();
             refrescarRetos();
             refrescarGrupos();
             limpiarCamposLogin();
             actualizarEtiquetasSesion();
+
+            // recargar combos dependientes de la sesión
+            cargarAdminGrupos();
+            cargarPuntosGrupos();
+            cargarRetosDisponibles();
 
         } catch (SQLException ex) {
             error("Error BD: " + ex.getMessage());
@@ -257,9 +367,21 @@ public class InterfazGrafica extends JFrame {
         if (btnLogin != null) btnLogin.setEnabled(true);
 
         actualizarEtiquetasSesion();
+
+        // limpiar combos dependientes
+        cbAdminGrupos.removeAllItems();
+        cbUsuariosGrupo.removeAllItems();
+        cbPuntosGrupos.removeAllItems();
+
+        // limpiar mensajes y habilitaciones
+        lblAdminMensaje.setText("");
+        cbAdminGrupos.setEnabled(true);
+        cbRetosDisponibles.setEnabled(true);
+        btnAsignarReto.setEnabled(true);
+        btnQuitarReto.setEnabled(true);
     }
 
-    /* ===================== ACCIONES (INSERT en MySQL) ===================== */
+    /* ===================== ACCIONES (INSERT / UPDATE en MySQL) ===================== */
 
     private void onAgregarReto(ActionEvent e) {
         String nombre = rNombre.getText().trim();
@@ -283,6 +405,7 @@ public class InterfazGrafica extends JFrame {
             info("Reto agregado.");
             rNombre.setText(""); rDesc.setText(""); rPuntos.setValue(10); rEstado.setSelected(false);
             refrescarRetos();
+            cargarRetosDisponibles();
         } catch (SQLException ex) {
             error("Error BD: " + ex.getMessage());
         }
@@ -339,6 +462,10 @@ public class InterfazGrafica extends JFrame {
             gNombre.setText("");
             refrescarGrupos();
 
+            // recargar combos relevantes
+            cargarAdminGrupos();
+            cargarPuntosGrupos();
+
         } catch (SQLIntegrityConstraintViolationException d) {
             error("El nombre del grupo ya existe o viola una restricción.");
         } catch (SQLException ex) {
@@ -391,8 +518,288 @@ public class InterfazGrafica extends JFrame {
             info("Te uniste al grupo correctamente.");
             refrescarGrupos();
 
+            // recargar combos
+            cargarPuntosGrupos();
+
         } catch (SQLException ex) {
             error("Error BD: " + ex.getMessage());
+        }
+    }
+
+    // ===================== NUEVAS FUNCIONES: asignar/quitar retos y calificaciones =====================
+
+    private void cargarAdminGrupos() {
+        cbAdminGrupos.removeAllItems();
+        lblAdminMensaje.setText("");
+        cbUsuariosGrupo.removeAllItems();
+        // Deshabilitar controles hasta saber si hay admins
+        cbRetosDisponibles.setEnabled(true);
+        btnAsignarReto.setEnabled(true);
+        btnQuitarReto.setEnabled(true);
+        try (Connection cn = BD.conectar()) {
+            if (usuarioLogueado == null) {
+                lblAdminMensaje.setText("Debe iniciar sesión para ver grupos de administración.");
+                // deshabilitar controles admin
+                cbAdminGrupos.setEnabled(false);
+                cbRetosDisponibles.setEnabled(false);
+                btnAsignarReto.setEnabled(false);
+                btnQuitarReto.setEnabled(false);
+                return;
+            }
+            int userID = obtenerIDUsuario(usuarioLogueado.getCorreo(), cn);
+            String sql = "SELECT g.id, g.nombre FROM grupos g JOIN grupo_admin ga ON ga.grupo_id = g.id WHERE ga.usuario_id = ?";
+            try (PreparedStatement ps = cn.prepareStatement(sql)) {
+                ps.setInt(1, userID);
+                ResultSet rs = ps.executeQuery();
+                boolean any = false;
+                while (rs.next()) {
+                    cbAdminGrupos.addItem(rs.getInt("id") + " - " + rs.getString("nombre"));
+                    any = true;
+                }
+                if (!any) {
+                    // no es admin de ningún grupo
+                    lblAdminMensaje.setText("No eres administrador de ningún grupo.");
+                    cbAdminGrupos.setEnabled(false);
+                    cbRetosDisponibles.setEnabled(false);
+                    btnAsignarReto.setEnabled(false);
+                    btnQuitarReto.setEnabled(false);
+                    cbUsuariosGrupo.removeAllItems();
+                } else {
+                    lblAdminMensaje.setText("");
+                    cbAdminGrupos.setEnabled(true);
+                    cbRetosDisponibles.setEnabled(true);
+                    btnAsignarReto.setEnabled(true);
+                    btnQuitarReto.setEnabled(true);
+                }
+            }
+        } catch (SQLException ex) {
+            error("Error cargando grupos admin: " + ex.getMessage());
+        }
+        // actualizar info del grupo seleccionado (si hay)
+        actualizarRetoAsignadoYUsuarios();
+    }
+
+    private void cargarRetosDisponibles() {
+        cbRetosDisponibles.removeAllItems();
+        try (Connection cn = BD.conectar()) {
+            String sql = "SELECT id, nombre FROM retos WHERE estado = 1 ORDER BY id DESC";
+            try (PreparedStatement ps = cn.prepareStatement(sql);
+                 ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    cbRetosDisponibles.addItem(rs.getInt("id") + " - " + rs.getString("nombre"));
+                }
+            }
+        } catch (SQLException ex) {
+            error("Error cargando retos disponibles: " + ex.getMessage());
+        }
+    }
+
+    private void actualizarRetoAsignadoYUsuarios() {
+        lblRetoAsignado.setText("Reto asignado: (ninguno)");
+        cbUsuariosGrupo.removeAllItems();
+
+        // si combo deshabilitado o vacío, salir
+        if (!cbAdminGrupos.isEnabled() || cbAdminGrupos.getItemCount() == 0) {
+            // aseguramos spinner con tope amplio por defecto
+            spPuntuacion.setModel(new SpinnerNumberModel(Integer.valueOf(0), Integer.valueOf(0), Integer.valueOf(10000), Integer.valueOf(1)));
+            return;
+        }
+
+        String sel = (String) cbAdminGrupos.getSelectedItem();
+        if (sel == null) return;
+        int grupoId = Integer.parseInt(sel.split(" - ")[0]);
+        try (Connection cn = BD.conectar()) {
+            // obtener reto asignado
+            PreparedStatement ps = cn.prepareStatement("SELECT r.id, r.nombre, r.puntos FROM grupos g LEFT JOIN retos r ON r.id = g.reto_asignado WHERE g.id = ?");
+            ps.setInt(1, grupoId);
+            ResultSet rs = ps.executeQuery();
+            Integer retoPuntos = null;
+            if (rs.next()) {
+                int idR = rs.getInt(1);
+                String nombre = rs.getString(2);
+                if (nombre != null) {
+                    lblRetoAsignado.setText("Reto asignado: " + idR + " - " + nombre);
+                    retoPuntos = rs.getInt("puntos");
+                } else {
+                    lblRetoAsignado.setText("Reto asignado: (ninguno)");
+                }
+            }
+
+            // cargar usuarios del grupo para calificar
+            PreparedStatement ps2 = cn.prepareStatement(
+                "SELECT u.id, u.nombre FROM usuarios u JOIN grupo_participantes gp ON gp.usuario_id = u.id WHERE gp.grupo_id = ?"
+            );
+            ps2.setInt(1, grupoId);
+            ResultSet rs2 = ps2.executeQuery();
+            while (rs2.next()) {
+                cbUsuariosGrupo.addItem(rs2.getInt("id") + " - " + rs2.getString("nombre"));
+            }
+
+            // Establecer límite máximo del spinner según puntos del reto asignado (si existe)
+            if (retoPuntos != null) {
+                // Evitar ambigüedad en constructor: utilizar Integer.valueOf(...)
+                spPuntuacion.setModel(new SpinnerNumberModel(Integer.valueOf(0), Integer.valueOf(0), Integer.valueOf(retoPuntos), Integer.valueOf(1)));
+            } else {
+                // sin reto asignado: dejamos un tope grande para no bloquear (pero validamos antes de insertar)
+                spPuntuacion.setModel(new SpinnerNumberModel(Integer.valueOf(0), Integer.valueOf(0), Integer.valueOf(10000), Integer.valueOf(1)));
+            }
+
+        } catch (SQLException ex) {
+            error("Error actualizando info de grupo: " + ex.getMessage());
+        }
+    }
+
+    private void asignarRetoAGrupo() {
+        if (usuarioLogueado == null) { error("Debe iniciar sesión."); return; }
+        String selG = (String) cbAdminGrupos.getSelectedItem();
+        String selR = (String) cbRetosDisponibles.getSelectedItem();
+        if (selG == null || selR == null) { warn("Seleccione grupo y reto."); return; }
+        int grupoId = Integer.parseInt(selG.split(" - ")[0]);
+        int retoId  = Integer.parseInt(selR.split(" - ")[0]);
+
+        try (Connection cn = BD.conectar()) {
+            // verificar admin
+            if (!esAdminDelGrupo(grupoId, cn)) {
+                error("No eres administrador de ese grupo.");
+                return;
+            }
+            // asignar
+            PreparedStatement ps = cn.prepareStatement("UPDATE grupos SET reto_asignado = ? WHERE id = ?");
+            ps.setInt(1, retoId);
+            ps.setInt(2, grupoId);
+            ps.executeUpdate();
+            info("Reto asignado al grupo.");
+            actualizarRetoAsignadoYUsuarios();
+            refrescarGrupos();
+        } catch (SQLException ex) {
+            error("Error asignando reto: " + ex.getMessage());
+        }
+    }
+
+    private void quitarRetoDeGrupo() {
+        if (usuarioLogueado == null) { error("Debe iniciar sesión."); return; }
+        String selG = (String) cbAdminGrupos.getSelectedItem();
+        if (selG == null) { warn("Seleccione grupo."); return; }
+        int grupoId = Integer.parseInt(selG.split(" - ")[0]);
+
+        try (Connection cn = BD.conectar()) {
+            if (!esAdminDelGrupo(grupoId, cn)) {
+                error("No eres administrador de ese grupo.");
+                return;
+            }
+            PreparedStatement ps = cn.prepareStatement("UPDATE grupos SET reto_asignado = NULL WHERE id = ?");
+            ps.setInt(1, grupoId);
+            ps.executeUpdate();
+            info("Reto quitado del grupo.");
+            actualizarRetoAsignadoYUsuarios();
+            refrescarGrupos();
+        } catch (SQLException ex) {
+            error("Error quitando reto: " + ex.getMessage());
+        }
+    }
+
+    private void agregarCalificacionAUsuario() {
+        if (usuarioLogueado == null) { error("Debe iniciar sesión."); return; }
+        String selG = (String) cbAdminGrupos.getSelectedItem();
+        String selU = (String) cbUsuariosGrupo.getSelectedItem();
+        if (selG == null || selU == null) { warn("Seleccione grupo y usuario."); return; }
+        int grupoId = Integer.parseInt(selG.split(" - ")[0]);
+        int usuarioIdEvaluado = Integer.parseInt(selU.split(" - ")[0]);
+        int puntuacion = ((Number) spPuntuacion.getValue()).intValue();
+
+        try (Connection cn = BD.conectar()) {
+            if (!esAdminDelGrupo(grupoId, cn)) {
+                error("No eres administrador de ese grupo.");
+                return;
+            }
+
+            // Obtener reto asignado al grupo (para relacionar calificación y validar puntos máximos)
+            PreparedStatement psR = cn.prepareStatement("SELECT reto_asignado FROM grupos WHERE id = ?");
+            psR.setInt(1, grupoId);
+            ResultSet rsR = psR.executeQuery();
+            if (!rsR.next() || rsR.getObject(1) == null) {
+                warn("El grupo no tiene un reto asignado. Asigne un reto antes de calificar.");
+                return;
+            }
+            int retoId = rsR.getInt(1);
+
+            // obtener puntos máximos del reto
+            PreparedStatement psP = cn.prepareStatement("SELECT puntos FROM retos WHERE id = ?");
+            psP.setInt(1, retoId);
+            ResultSet rsP = psP.executeQuery();
+            int maxPuntos = 10000; // fallback
+            if (rsP.next()) maxPuntos = rsP.getInt(1);
+
+            // Validar que la puntuación no supere el máximo
+            if (puntuacion > maxPuntos) {
+                warn("La puntuación no puede ser mayor al máximo del reto (" + maxPuntos + ").");
+                return;
+            }
+
+            // Insertar en calificaciones
+            PreparedStatement ps = cn.prepareStatement(
+                "INSERT INTO calificaciones(usuario_id, reto_id, puntuacion_final) VALUES(?,?,?)"
+            );
+            ps.setInt(1, usuarioIdEvaluado);
+            ps.setInt(2, retoId);
+            ps.setInt(3, puntuacion);
+            ps.executeUpdate();
+            info("Calificación registrada para el usuario.");
+            // refrescar datos de puntos si están viendo la pestaña Puntos
+            refrescarPuntos();
+        } catch (SQLException ex) {
+            error("Error agregando calificación: " + ex.getMessage());
+        }
+    }
+
+    // ===================== PUNTOS - nueva pestaña =====================
+
+    private void cargarPuntosGrupos() {
+        cbPuntosGrupos.removeAllItems();
+        if (usuarioLogueado == null) return;
+        try (Connection cn = BD.conectar()) {
+            int userID = obtenerIDUsuario(usuarioLogueado.getCorreo(), cn);
+            String sql = "SELECT g.id, g.nombre FROM grupos g JOIN grupo_participantes gp ON gp.grupo_id = g.id WHERE gp.usuario_id = ? GROUP BY g.id, g.nombre";
+            try (PreparedStatement ps = cn.prepareStatement(sql)) {
+                ps.setInt(1, userID);
+                ResultSet rs = ps.executeQuery();
+                while (rs.next()) {
+                    cbPuntosGrupos.addItem(rs.getInt("id") + " - " + rs.getString("nombre"));
+                }
+            }
+        } catch (SQLException ex) {
+            error("Error cargando grupos para puntos: " + ex.getMessage());
+        }
+    }
+
+    private void refrescarPuntos() {
+        puntosModel.setRowCount(0);
+        String sel = (String) cbPuntosGrupos.getSelectedItem();
+        if (sel == null) return;
+        int grupoId = Integer.parseInt(sel.split(" - ")[0]);
+
+        try (Connection cn = BD.conectar()) {
+            String sql =
+                "SELECT u.id AS uid, u.nombre, COALESCE(SUM(c.puntuacion_final),0) AS puntos " +
+                "FROM usuarios u " +
+                "JOIN grupo_participantes gp ON gp.usuario_id = u.id " +
+                "LEFT JOIN calificaciones c ON c.usuario_id = u.id " +
+                "WHERE gp.grupo_id = ? " +
+                "GROUP BY u.id, u.nombre " +
+                "ORDER BY puntos DESC";
+            try (PreparedStatement ps = cn.prepareStatement(sql)) {
+                ps.setInt(1, grupoId);
+                ResultSet rs = ps.executeQuery();
+                while (rs.next()) {
+                    puntosModel.addRow(new Object[]{
+                        rs.getInt("uid"),
+                        rs.getString("nombre"),
+                        rs.getInt("puntos")
+                    });
+                }
+            }
+        } catch (SQLException ex) {
+            error("Error cargando puntos: " + ex.getMessage());
         }
     }
 
@@ -473,12 +880,30 @@ public class InterfazGrafica extends JFrame {
         while(m.getRowCount()>0) m.removeRow(0);
     }
 
+    // sobrecarga: usa conexión ya abierta
     private int obtenerIDUsuario(String correo, Connection cn) throws SQLException {
         PreparedStatement ps = cn.prepareStatement("SELECT id FROM usuarios WHERE correo=?");
         ps.setString(1, correo);
         ResultSet rs = ps.executeQuery();
         if (rs.next()) return rs.getInt("id");
         throw new SQLException("Usuario no encontrado para correo: " + correo);
+    }
+
+    // versión que abre conexión
+    private int obtenerIDUsuario(String correo) throws SQLException {
+        try (Connection cn = BD.conectar()) {
+            return obtenerIDUsuario(correo, cn);
+        }
+    }
+
+    private boolean esAdminDelGrupo(int grupoId, Connection cn) throws SQLException {
+        if (usuarioLogueado == null) return false;
+        int uid = obtenerIDUsuario(usuarioLogueado.getCorreo(), cn);
+        PreparedStatement ps = cn.prepareStatement("SELECT * FROM grupo_admin WHERE grupo_id = ? AND usuario_id = ?");
+        ps.setInt(1, grupoId);
+        ps.setInt(2, uid);
+        ResultSet rs = ps.executeQuery();
+        return rs.next();
     }
 
     private void actualizarEtiquetasSesion() {
