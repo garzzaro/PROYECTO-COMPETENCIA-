@@ -68,7 +68,7 @@ public class Usuario {
         return grupo.Asignar(usuario);
     }
 
-    // Poder asignar los usuarios a los retos
+    
     public boolean asignarseAReto(Retos reto) {
         if (!retos.contains(reto)) {
             retos.add(reto);
